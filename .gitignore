@@ -14,7 +14,7 @@ runs/
 *.torchscript
 
 # Output figures & analysis (opsional — bisa di-commit untuk demo)
-# outputs/
+outputs/
 
 # Python cache
 __pycache__/
