@@ -14,6 +14,7 @@ Cara pakai:
 import argparse
 import random
 from pathlib import Path
+import re
 
 import cv2
 import numpy as np
@@ -30,6 +31,40 @@ OUT_DIR  = Path("outputs/poster_figures")
 
 # ── Utilitas ─────────────────────────────────────────────────────────────────
 
+# def read_yolo_seg_mask(label_path: Path, img_shape: tuple) -> np.ndarray:
+#     """Konversi label YOLO-seg polygon ke binary mask gambar penuh."""
+#     h, w = img_shape[:2]
+#     combined_mask = np.zeros((h, w), dtype=np.uint8)
+
+#     if not label_path.exists():
+#         return combined_mask
+
+#     with open(label_path) as f:
+#         for line in f:
+#             tokens = line.strip().split()
+#             if len(tokens) < 7:
+#                 continue
+#             coords = np.array(tokens[1:], dtype=float)
+#             pts    = coords.reshape(-1, 2)
+#             pts[:, 0] *= w
+#             pts[:, 1] *= h
+#             pts = pts.astype(np.int32)
+#             cv2.fillPoly(combined_mask, [pts], 1)
+
+#     return combined_mask
+
+def extract_numbers_from_line(line: str) -> list[float]:
+    """
+    Ekstraksi angka dari baris label YOLO-seg.
+
+    Dibuat robust untuk kasus angka menempel, misalnya:
+        0.73333333333333330.378125
+    """
+    pattern = r"[-+]?(?:\d*\.\d+|\d+)"
+    nums = re.findall(pattern, line)
+    return [float(x) for x in nums]
+
+
 def read_yolo_seg_mask(label_path: Path, img_shape: tuple) -> np.ndarray:
     """Konversi label YOLO-seg polygon ke binary mask gambar penuh."""
     h, w = img_shape[:2]
@@ -40,25 +75,76 @@ def read_yolo_seg_mask(label_path: Path, img_shape: tuple) -> np.ndarray:
 
     with open(label_path) as f:
         for line in f:
-            tokens = line.strip().split()
-            if len(tokens) < 7:
+            line = line.strip()
+            if not line:
                 continue
-            coords = np.array(tokens[1:], dtype=float)
-            pts    = coords.reshape(-1, 2)
+
+            nums = extract_numbers_from_line(line)
+
+            # Minimal: class_id + 3 pasang koordinat = 7 angka
+            if len(nums) < 7:
+                continue
+
+            coords = np.array(nums[1:], dtype=np.float32)
+
+            if len(coords) % 2 != 0:
+                continue
+
+            pts = coords.reshape(-1, 2)
+
+            # Abaikan koordinat invalid
+            if np.any(pts < 0.0) or np.any(pts > 1.0):
+                continue
+
             pts[:, 0] *= w
             pts[:, 1] *= h
             pts = pts.astype(np.int32)
+
             cv2.fillPoly(combined_mask, [pts], 1)
 
     return combined_mask
 
 
+# def load_depth_norm(path: Path, target_shape: tuple = None) -> np.ndarray:
+#     """Load dan normalisasi depth ke [0,1]."""
+#     depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+#     if depth is None:
+#         return None
+#     depth = depth.astype(np.float32)
+#     if depth.ndim == 3:
+#         depth = depth[:, :, 0]
+
+#     if target_shape is not None:
+#         h, w = target_shape[:2]
+#         if depth.shape[:2] != (h, w):
+#             depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_NEAREST)
+
+#     dmin, dmax = depth.min(), depth.max()
+#     if dmax > dmin:
+#         depth = (depth - dmin) / (dmax - dmin)
+#     return depth
+
+
 def load_depth_norm(path: Path, target_shape: tuple = None) -> np.ndarray:
-    """Load dan normalisasi depth ke [0,1]."""
-    depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if depth is None:
+    """
+    Load dan normalisasi depth ke [0,1].
+
+    Mendukung:
+      - .npy depth array
+      - .png/.jpg/.jpeg depth image
+    """
+    if not path.exists():
         return None
+
+    if path.suffix.lower() == ".npy":
+        depth = np.load(path)
+    else:
+        depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if depth is None:
+            return None
+
     depth = depth.astype(np.float32)
+
     if depth.ndim == 3:
         depth = depth[:, :, 0]
 
@@ -67,10 +153,22 @@ def load_depth_norm(path: Path, target_shape: tuple = None) -> np.ndarray:
         if depth.shape[:2] != (h, w):
             depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_NEAREST)
 
-    dmin, dmax = depth.min(), depth.max()
-    if dmax > dmin:
-        depth = (depth - dmin) / (dmax - dmin)
-    return depth
+    valid = np.isfinite(depth) & (depth > 0)
+
+    if not np.any(valid):
+        return np.zeros_like(depth, dtype=np.float32)
+
+    # Percentile normalization supaya depth tidak tampak full hitam
+    dmin, dmax = np.percentile(depth[valid], [2, 98])
+
+    if dmax <= dmin:
+        return np.zeros_like(depth, dtype=np.float32)
+
+    depth_norm = (depth - dmin) / (dmax - dmin)
+    depth_norm = np.clip(depth_norm, 0, 1)
+    depth_norm[~valid] = 0
+
+    return depth_norm
 
 
 def apply_colormap(img_gray: np.ndarray, cmap="turbo") -> np.ndarray:
@@ -248,13 +346,30 @@ def collect_samples(split: str, n: int, base: Path) -> list:
         gt_mask  = read_yolo_seg_mask(lbl_path, rgb.shape)
 
         # Depth
+        # depth = None
+        # for ext in [".png", ".jpg"]:
+        #     dp = dep_dir / f"{stem}{ext}"
+        #     if dp.exists():
+        #         depth = load_depth_norm(dp, rgb.shape)
+        #         break
+        #     dp = dep_dir / f"{stem}_depth{ext}"
+        #     if dp.exists():
+        #         depth = load_depth_norm(dp, rgb.shape)
+        #         break
+        
         depth = None
-        for ext in [".png", ".jpg"]:
-            dp = dep_dir / f"{stem}{ext}"
-            if dp.exists():
-                depth = load_depth_norm(dp, rgb.shape)
-                break
-            dp = dep_dir / f"{stem}_depth{ext}"
+        depth_candidates = [
+            dep_dir / f"{stem}.npy",
+            dep_dir / f"{stem}_depth.npy",
+            dep_dir / f"{stem}.png",
+            dep_dir / f"{stem}_depth.png",
+            dep_dir / f"{stem}.jpg",
+            dep_dir / f"{stem}_depth.jpg",
+            dep_dir / f"{stem}.jpeg",
+            dep_dir / f"{stem}_depth.jpeg",
+        ]
+
+        for dp in depth_candidates:
             if dp.exists():
                 depth = load_depth_norm(dp, rgb.shape)
                 break

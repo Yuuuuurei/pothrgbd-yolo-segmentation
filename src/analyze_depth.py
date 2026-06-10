@@ -12,7 +12,7 @@ Fitur:
 
 Cara pakai:
     python src/analyze_depth.py
-    python src/analyze_depth.py --rgb path.jpg --depth depth.png --mask pred_mask.npy
+    python src/analyze_depth.py --rgb path.jpg --depth depth.npy --mask pred_mask.npy
     python src/analyze_depth.py --use-pred-dir runs/segment/pothrgbd_predictions/
 """
 
@@ -48,13 +48,28 @@ OUT_DIR  = Path("outputs")
 # ── Utilitas Depth ───────────────────────────────────────────────────────────
 
 def load_depth(path: Path) -> np.ndarray:
-    """Load depth image sebagai float32. Mendukung 16-bit dan 8-bit."""
-    depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if depth is None:
-        raise FileNotFoundError(f"Depth tidak bisa dibuka: {path}")
+    """
+    Load depth sebagai float32.
+
+    Mendukung:
+      - .npy depth array
+      - .png/.jpg/.jpeg depth image
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Depth file tidak ditemukan: {path}")
+
+    if path.suffix.lower() == ".npy":
+        depth = np.load(path)
+    else:
+        depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if depth is None:
+            raise FileNotFoundError(f"Depth tidak bisa dibuka: {path}")
+
     depth = depth.astype(np.float32)
+
     if depth.ndim == 3:
-        depth = depth[:, :, 0]   # ambil channel pertama saja
+        depth = depth[:, :, 0]
+
     return depth
 
 
@@ -234,25 +249,34 @@ def create_point_cloud(rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray,
     cx_cam, cy_cam = w / 2, h / 2
 
     rows, cols = np.where(mask.astype(bool))
+    if rows.size == 0:
+        print("  [WARN] Mask kosong. Point cloud tidak dibuat.")
+        return
+
     Z = depth[rows, cols].astype(np.float64)
 
-    # Filter Z=0 atau sangat kecil
-    valid = Z > 0
-    rows, cols, Z = rows[valid], cols[valid], Z[valid]
+    # Filter depth tidak valid
+    valid = np.isfinite(Z) & (Z > 0)
+    rows = rows[valid]
+    cols = cols[valid]
+    Z = Z[valid]
+
+    if Z.size == 0:
+        print("  [WARN] Tidak ada nilai depth valid. Point cloud tidak dibuat.")
+        return
 
     X = (cols - cx_cam) * Z / fx
     Y = (rows - cy_cam) * Z / fy
 
     points = np.stack([X, Y, Z], axis=1)
 
-    # Warna dari RGB
+    # Warna dari RGB; rows dan cols sudah difilter, jadi jangan difilter lagi
     rgb_uint8 = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
-    colors_raw = rgb_uint8[rows[valid] if valid.any() else rows,
-                           cols[valid] if valid.any() else cols] / 255.0
-    colors = colors_raw
+    colors = rgb_uint8[rows, cols] / 255.0
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
+
     if colors.shape[0] == points.shape[0]:
         pcd.colors = o3d.utility.Vector3dVector(colors)
 
@@ -260,26 +284,34 @@ def create_point_cloud(rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray,
     o3d.io.write_point_cloud(str(out_path), pcd)
     print(f"  [OK] Point cloud disimpan: {out_path}  ({len(points)} poin)")
 
-    # Screenshot render (headless) — menggunakan offscreen renderer
-    try:
-        render = o3d.visualization.rendering.OffscreenRenderer(800, 600)
-        mat = o3d.visualization.rendering.MaterialRecord()
-        mat.shader = "defaultUnlit"
-        mat.point_size = 3.0
-        render.scene.add_geometry("pcd", pcd, mat)
-        render.scene.set_background([0.1, 0.1, 0.1, 1.0])
+    print("  [INFO] Render otomatis dilewati. Buka file .ply dengan MeshLab, CloudCompare, atau Open3D viewer.")
+    # try:
+    #     render = o3d.visualization.rendering.OffscreenRenderer(800, 600)
+    #     mat = o3d.visualization.rendering.MaterialRecord()
+    #     mat.shader = "defaultUnlit"
+    #     mat.point_size = 3.0
 
-        bounds = pcd.get_axis_aligned_bounding_box()
-        center = bounds.get_center()
-        extent = bounds.get_max_extent()
-        render.setup_camera(60.0, center, center + np.array([0, 0, -extent]),
-                            [0, -1, 0])
+    #     render.scene.add_geometry("pcd", pcd, mat)
+    #     render.scene.set_background([0.1, 0.1, 0.1, 1.0])
 
-        img_o3d = render.render_to_image()
-        o3d.io.write_image(str(out_path.with_suffix(".png")), img_o3d)
-        print(f"  [OK] Render point cloud disimpan: {out_path.with_suffix('.png')}")
-    except Exception as e:
-        print(f"  [WARN] Render headless gagal ({e}). PCD file tetap tersimpan.")
+    #     bounds = pcd.get_axis_aligned_bounding_box()
+    #     center = bounds.get_center()
+    #     extent = bounds.get_max_extent()
+
+    #     if extent > 0:
+    #         render.setup_camera(
+    #             60.0,
+    #             center,
+    #             center + np.array([0, 0, -extent]),
+    #             [0, -1, 0],
+    #         )
+
+    #         img_o3d = render.render_to_image()
+    #         o3d.io.write_image(str(out_path.with_suffix(".png")), img_o3d)
+    #         print(f"  [OK] Render point cloud disimpan: {out_path.with_suffix('.png')}")
+
+    # except Exception as e:
+    #     print(f"  [WARN] Render headless gagal ({e}). PCD file tetap tersimpan.")
 
 
 # ── Pipeline Utama ────────────────────────────────────────────────────────────
@@ -337,11 +369,12 @@ def run_batch_from_predictions(pred_dir: Path, depth_base: Path,
 
         # Cari depth pair
         dep_path = None
-        for ext in [".png", ".jpg"]:
+        for ext in [".npy", ".png", ".jpg", ".jpeg"]:
             p = depth_base / f"{stem}{ext}"
             if p.exists():
                 dep_path = p
                 break
+
             p = depth_base / f"{stem}_depth{ext}"
             if p.exists():
                 dep_path = p
@@ -431,7 +464,7 @@ def main():
         print("[INFO] Gunakan --rgb dan --depth untuk single image,")
         print("       atau --pred-dir untuk batch mode.")
         print("\nContoh:")
-        print("  python src/analyze_depth.py --rgb img.jpg --depth dep.png")
+        print("  python src/analyze_depth.py --rgb img.jpg --depth dep.npy")
         print("  python src/analyze_depth.py --pred-dir runs/segment/pothrgbd_predictions/")
 
     print("\n[DONE] Analisis selesai. Output di: outputs/depth_profiles/")

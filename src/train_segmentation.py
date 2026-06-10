@@ -13,18 +13,19 @@ import argparse
 from pathlib import Path
 from ultralytics import YOLO
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # ── Default Config ─────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {
     "model"    : "yolov8n-seg.pt",
-    "data"     : "data/pothrgbd/data.yaml",
+    "data"     : PROJECT_ROOT / "data" / "pothrgbd" / "data.yaml",
     "epochs"   : 60,
     "imgsz"    : 640,
     "batch"    : 8,
     "patience" : 10,
     "workers"  : 2,
     "device"   : "",          # "" → auto detect (GPU jika ada, CPU jika tidak)
-    "project"  : "runs/segment",
+    "project"  : PROJECT_ROOT / "runs" / "segment",
     "name"     : "pothrgbd_seg",
     "exist_ok" : False,
     "amp"      : True,        # Automatic Mixed Precision (hemat VRAM)
@@ -76,14 +77,14 @@ def main():
     print()
 
     results = model.train(
-        data     = args.data,
+        data     = str(Path(args.data).resolve() if Path(args.data).is_absolute() else PROJECT_ROOT / args.data),
         epochs   = args.epochs,
         imgsz    = args.imgsz,
         batch    = args.batch,
         patience = args.patience,
         workers  = args.workers,
         device   = args.device if args.device else None,
-        project  = DEFAULT_CONFIG["project"],
+        project  = str(DEFAULT_CONFIG["project"]),
         name     = args.name,
         exist_ok = DEFAULT_CONFIG["exist_ok"],
         amp      = not args.no_amp,

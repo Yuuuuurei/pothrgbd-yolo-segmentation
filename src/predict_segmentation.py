@@ -15,20 +15,38 @@ import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 IMG_EXTS = {".jpg", ".jpeg", ".png"}
 
 
 def parse_args():
     p = argparse.ArgumentParser(description="Prediksi segmentasi pothole")
-    p.add_argument("--weights", default="runs/segment/pothrgbd_seg/weights/best.pt")
-    p.add_argument("--source",  default="data/pothrgbd/test/images")
-    p.add_argument("--conf",    type=float, default=0.25)
-    p.add_argument("--iou",     type=float, default=0.45)
-    p.add_argument("--imgsz",   type=int,   default=640)
-    p.add_argument("--device",  default="")
-    p.add_argument("--save-samples", type=int, default=10,
-                   help="Jumlah sampel gambar yang disimpan ke outputs/sample_masks/")
+
+    p.add_argument(
+        "--weights",
+        default=str(PROJECT_ROOT / "runs" / "segment" / "pothrgbd_seg" / "weights" / "best.pt"),
+        help="Path ke best.pt hasil training"
+    )
+
+    p.add_argument(
+        "--source",
+        default=str(PROJECT_ROOT / "data" / "pothrgbd" / "test" / "images"),
+        help="Path gambar/folder input"
+    )
+
+    p.add_argument("--conf", type=float, default=0.25)
+    p.add_argument("--iou", type=float, default=0.45)
+    p.add_argument("--imgsz", type=int, default=640)
+    p.add_argument("--device", default="")
+
+    p.add_argument(
+        "--save-samples",
+        type=int,
+        default=10,
+        help="Jumlah sampel gambar yang disimpan ke outputs/sample_masks/"
+    )
+
     return p.parse_args()
 
 
@@ -56,25 +74,42 @@ def main():
     print("  PothRGBD — Segmentation Inference")
     print("=" * 60)
 
-    if not Path(args.weights).exists():
-        print(f"[ERROR] Weights tidak ditemukan: {args.weights}")
+    weights_path = Path(args.weights)
+    source_path = Path(args.source)
+
+    if not weights_path.is_absolute():
+        weights_path = PROJECT_ROOT / weights_path
+
+    if not source_path.is_absolute():
+        source_path = PROJECT_ROOT / source_path
+
+    if not weights_path.exists():
+        print(f"[ERROR] Weights tidak ditemukan: {weights_path}")
         return
 
-    model = YOLO(args.weights)
+    if not source_path.exists():
+        print(f"[ERROR] Source tidak ditemukan: {source_path}")
+        return
+
+    model = YOLO(str(weights_path))
 
     # ── Jalankan prediksi ───────────────────────────────────────────────────
+    predict_project = PROJECT_ROOT / "runs" / "predict"
+
     results = model.predict(
-        source  = args.source,
+        source  = str(source_path),
         conf    = args.conf,
         iou     = args.iou,
         imgsz   = args.imgsz,
         device  = args.device if args.device else None,
         save    = True,
+        project = str(predict_project),
         name    = "pothrgbd_predictions",
+        exist_ok = True,
     )
 
     # ── Simpan sampel dengan overlay custom ─────────────────────────────────
-    sample_dir = Path("outputs/sample_masks")
+    sample_dir = PROJECT_ROOT / "outputs" / "sample_masks"
     sample_dir.mkdir(parents=True, exist_ok=True)
 
     saved = 0
