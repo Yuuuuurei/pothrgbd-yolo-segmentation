@@ -1,0 +1,22 @@
+# PothRGBD Segmentation Project
+# Python >= 3.10 direkomendasikan
+
+# Core
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+pyyaml>=6.0
+tqdm>=4.65.0
+scikit-image>=0.21.0
+
+# Dataset download
+kaggle>=1.5.16
+
+# Opsional — 3D point cloud
+# open3d>=0.17.0
+
+# Opsional — notebook
+# jupyter>=1.0.0
+# ipykernel>=6.0.0

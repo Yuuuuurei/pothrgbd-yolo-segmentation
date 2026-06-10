@@ -1,0 +1,46 @@
+# Dataset (jangan commit data besar ke GitHub)
+data/pothrgbd/train/
+data/pothrgbd/valid/
+data/pothrgbd/test/
+data/_raw/
+.kaggle/
+
+# YOLO training outputs
+runs/
+
+# Model weights (file besar)
+*.pt
+*.onnx
+*.torchscript
+
+# Output figures & analysis (opsional — bisa di-commit untuk demo)
+# outputs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Kaggle credentials (JANGAN commit ini!)
+kaggle.json
+
+# OS
+.DS_Store
+Thumbs.db
