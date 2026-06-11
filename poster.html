@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poster Ilmiah: PothRGBD YOLO Segmentation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+  :root {
+    /* Core palette — asphalt-and-signal theme */
+    --bg:        #0E1117;
+    --panel:     #161B24;
+    --panel2:    #1C2333;
+    --border:    #2A3347;
+    --accent:    #F5A623;   /* road-marking amber */
+    --accent2:   #3EC98A;   /* segmentation mask green */
+    --accent3:   #5B8CFF;   /* depth-map blue */
+    --text:      #E8EBF0;
+    --muted:     #7B8AA0;
+    --label:     #B0BCCC;
+
+    /* A2 at 96 dpi — 1587 × 2245 px  */
+    --w: 1587px;
+    --h: 2245px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { background: var(--bg); display: flex; justify-content: center; padding: 0; }
+
+  body {
+    width: var(--w);
+    height: var(--h);
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    position: relative;
+  }
+
+  /* ─── Background texture ─── */
+  body::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 900px 700px at 20% 10%, rgba(245,166,35,.07) 0%, transparent 70%),
+      radial-gradient(ellipse 700px 500px at 85% 55%, rgba(62,201,138,.05) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 400px at 50% 95%, rgba(91,140,255,.07) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .poster-inner { position: relative; z-index: 1; padding: 44px 48px 48px; }
+
+  /* ─── HEADER ─── */
+  .header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 24px;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+  }
+
+  .header-left { display: flex; flex-direction: column; gap: 12px; }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; letter-spacing: .12em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .eyebrow::before {
+    content: ''; width: 28px; height: 2px; background: var(--accent);
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 46px; font-weight: 700; line-height: 1.15;
+    color: var(--text);
+    letter-spacing: -.5px;
+  }
+  h1 span.hl { color: var(--accent); }
+  h1 span.hl2 { color: var(--accent2); }
+
+  .subtitle {
+    font-size: 16px; color: var(--muted); font-weight: 400; max-width: 760px;
+  }
+
+  .author-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 260px;
+  }
+  .author-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 17px; font-weight: 600; color: var(--text);
+  }
+  .author-nim {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; color: var(--accent); letter-spacing: .05em;
+  }
+  .author-inst {
+    font-size: 12px; color: var(--muted);
+  }
+  .author-links {
+    display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap;
+  }
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; padding: 3px 8px; border-radius: 4px;
+    border: 1px solid;
+  }
+  .badge-amber  { color: var(--accent);  border-color: var(--accent);  background: rgba(245,166,35,.08);  }
+  .badge-green  { color: var(--accent2); border-color: var(--accent2); background: rgba(62,201,138,.08); }
+  .badge-blue   { color: var(--accent3); border-color: var(--accent3); background: rgba(91,140,255,.08); }
+
+  /* ─── SECTION HEADER ─── */
+  .sec-label {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .sec-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: var(--accent); letter-spacing: .1em;
+    opacity: .7;
+  }
+  .sec-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px; font-weight: 700;
+    color: var(--text); letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .sec-line { flex: 1; height: 1px; background: var(--border); }
+
+  /* ─── GRID LAYOUT ─── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto auto auto;
+    gap: 14px;
+  }
+
+  /* ─── PANELS ─── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .panel-accent-top { border-top: 3px solid var(--accent); }
+  .panel-accent-green { border-top: 3px solid var(--accent2); }
+  .panel-accent-blue  { border-top: 3px solid var(--accent3); }
+
+  .span2 { grid-column: span 2; }
+  .span3 { grid-column: span 3; }
+
+  /* ─── PIPELINE ─── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0;
+    flex-wrap: nowrap; overflow: hidden;
+  }
+  .pipe-step {
+    flex: 1;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 10px;
+    text-align: center;
+    position: relative;
+  }
+  .pipe-step .ps-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+  .pipe-step .ps-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--accent); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .07em;
+    display: block; margin-bottom: 2px;
+  }
+  .pipe-step .ps-desc { font-size: 11px; color: var(--muted); line-height: 1.3; }
+  .pipe-arrow {
+    width: 28px; flex-shrink: 0;
+    text-align: center; font-size: 18px;
+    color: var(--accent); font-weight: 700;
+  }
+
+  /* ─── DATASET TABLE ─── */
+  table.data-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  table.data-table thead tr th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: var(--accent); text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: 6px 10px; border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  table.data-table tbody tr { border-bottom: 1px solid rgba(42,51,71,.5); }
+  table.data-table tbody tr:last-child { border-bottom: none; }
+  table.data-table tbody td {
+    padding: 8px 10px; color: var(--label); vertical-align: middle;
+  }
+  table.data-table tbody td:first-child {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent2);
+  }
+  .num-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; font-weight: 600; color: var(--text) !important;
+  }
+
+  /* ─── METRICS ─── */
+  .metrics-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .metric-card {
+    background: var(--panel2); border-radius: 8px;
+    padding: 14px 16px; border: 1px solid var(--border);
+  }
+  .metric-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;
+  }
+  .metric-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .metric-key { font-size: 12px; color: var(--muted); }
+  .metric-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px; font-weight: 700;
+  }
+  .val-highlight { color: var(--accent2); }
+  .val-normal    { color: var(--text); }
+  .progress-bar {
+    width: 100%; height: 5px;
+    background: var(--border); border-radius: 3px;
+    overflow: hidden; margin-top: 2px;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent3));
+  }
+
+  /* ─── ARCHITECTURE DIAGRAM ─── */
+  .arch-diagram {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .arch-layer {
+    display: flex; align-items: stretch; gap: 10px;
+  }
+  .arch-label-col {
+    width: 100px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+  .arch-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--muted);
+    text-align: right; line-height: 1.3;
+    text-transform: uppercase; letter-spacing: .07em;
+  }
+  .arch-blocks { display: flex; gap: 8px; flex: 1; align-items: stretch; }
+  .arch-block {
+    flex: 1; border-radius: 6px; padding: 8px 10px;
+    font-size: 11px; font-weight: 600; text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1.3; border: 1px solid;
+    min-height: 36px;
+  }
+  .ab-dark  { background: rgba(91,140,255,.12);  border-color: rgba(91,140,255,.35);  color: var(--accent3); }
+  .ab-mid   { background: rgba(245,166,35,.10);  border-color: rgba(245,166,35,.30);  color: var(--accent);  }
+  .ab-green { background: rgba(62,201,138,.10);  border-color: rgba(62,201,138,.30);  color: var(--accent2); }
+  .ab-gray  { background: rgba(120,140,160,.10); border-color: rgba(120,140,160,.25); color: var(--muted);   }
+
+  .arch-arrow-row {
+    display: flex; justify-content: center; align-items: center;
+    gap: 6px; margin: -4px 0;
+  }
+  .arch-arr { color: var(--muted); font-size: 14px; }
+
+  /* ─── METHODOLOGY STEPS ─── */
+  .method-steps { display: flex; flex-direction: column; gap: 10px; }
+  .method-step {
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .ms-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #e0920d);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700; color: #0E1117;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .ms-content { flex: 1; }
+  .ms-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px;
+  }
+  .ms-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+  /* ─── SEGMENTATION VISUALISER ─── */
+  .seg-vis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .seg-card {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--panel2);
+  }
+
+  .seg-canvas {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    position: relative;
+    overflow: hidden;
+    background: #1a1a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .seg-canvas img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Untuk plot yang tidak boleh terpotong */
+  .seg-canvas.contain img {
+    object-fit: contain;
+    background: #1a1a2a;
+  }
+
+  .seg-caption {
+    padding: 6px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    background: rgba(14, 17, 23, 0.92);
+  }
+
+  /* Drawn pothole shapes using CSS */
+  .pothole-road {
+    width: 100%; height: 100%;
+    background: linear-gradient(175deg, #4a4a4a 0%, #3a3a3a 40%, #2e2e2e 100%);
+    position: relative;
+  }
+  .pothole-road::before {
+    content: '';
+    position: absolute; top: 30%; left: 30%; width: 40%; height: 40%;
+    background: #1a1a1a; border-radius: 44% 56% 52% 48% / 42% 45% 55% 58%;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,.6);
+  }
+  .mask-overlay {
+    position: absolute; top: 30%; left: 30%; width: 40%; height: 40%;
+    background: rgba(62,201,138,.55);
+    border-radius: 44% 56% 52% 48% / 42% 45% 55% 58%;
+    border: 1.5px solid #3EC98A;
+  }
+  .bbox-overlay {
+    position: absolute; top: 25%; left: 25%; width: 50%; height: 50%;
+    border: 2px solid var(--accent);
+  }
+  .conf-tag {
+    position: absolute; top: 25%; left: 25%;
+    background: var(--accent); color: #0E1117;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px;
+  }
+
+  /* Depth visualiser */
+  .depth-vis {
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg,
+      #0a0070 0%, #1a00a0 15%,
+      #003db5 25%, #008fc8 40%,
+      #00c86e 55%, #a0d000 70%,
+      #e08000 85%, #ff3000 100%);
+    position: relative;
+  }
+  .depth-oval {
+    position: absolute; top: 28%; left: 28%; width: 44%; height: 44%;
+    border-radius: 44% 56% 52% 48% / 42% 45% 55% 58%;
+    background: linear-gradient(135deg, #ff9000 0%, #ffd700 50%, #ffff60 100%);
+    box-shadow: 0 0 20px rgba(255,200,0,.4);
+  }
+  .depth-colorbar {
+    position: absolute; right: 6px; top: 8%; bottom: 8%;
+    width: 12px; border-radius: 4px;
+    background: linear-gradient(to bottom,
+      #ff3000 0%, #e08000 15%, #a0d000 30%,
+      #00c86e 45%, #008fc8 60%, #003db5 75%,
+      #1a00a0 90%, #0a0070 100%);
+    border: 1px solid rgba(255,255,255,.15);
+  }
+
+  /* Surface plot */
+  .surface-vis {
+    width: 100%; height: 100%;
+    background: linear-gradient(160deg, #0c0c1a 0%, #141428 100%);
+    position: relative; display: flex; align-items: center; justify-content: center;
+  }
+  .surface-grid {
+    width: 80%; height: 80%;
+    position: relative;
+  }
+  .surface-grid svg { width: 100%; height: 100%; }
+
+  /* ─── DATASET CHARACTERISTICS ─── */
+  .char-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .char-pill {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 12px;
+    font-size: 12px; color: var(--label);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .char-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent2); flex-shrink: 0;
+  }
+
+  /* ─── STAT BOXES ─── */
+  .stat-row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .stat-box {
+    flex: 1; background: var(--panel2); border-radius: 8px;
+    border: 1px solid var(--border); padding: 12px 14px;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px; font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1; display: block;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ─── CONCLUSION ─── */
+  .conclusion-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+    margin-top: 4px;
+  }
+  .conc-item {
+    background: var(--panel2); border-radius: 8px;
+    border-left: 3px solid; padding: 12px 14px;
+  }
+  .conc-item:nth-child(1) { border-color: var(--accent2); }
+  .conc-item:nth-child(2) { border-color: var(--accent);  }
+  .conc-item:nth-child(3) { border-color: var(--accent3); }
+  .conc-icon { font-size: 20px; margin-bottom: 6px; }
+  .conc-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+  }
+  .conc-text { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+  /* ─── FOOTER ─── */
+  .footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .footer-links {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+
+      width: 100%;
+      gap: 16px;
+      align-items: center;
+  }
+
+  .footer-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--muted);
+
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+  }
+
+  .footer-copy {
+      margin-left: auto;
+  }
+  .qr-box {
+    width: 56px; height: 56px; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: var(--muted); text-align: center; line-height: 1.3;
+    padding: 4px;
+  }
+
+  /* ─── UTILS ─── */
+  p { font-size: 13px; color: var(--label); line-height: 1.6; }
+  p + p { margin-top: 8px; }
+  strong { color: var(--text); }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .tag-inline {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: rgba(91,140,255,.12); border: 1px solid rgba(91,140,255,.3);
+    color: var(--accent3); vertical-align: middle;
+  }
+
+  /* bar chart mini */
+  .mini-bar-chart { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .mbc-row { display: flex; align-items: center; gap: 8px; }
+  .mbc-label { width: 70px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .mbc-track { flex: 1; height: 12px; background: var(--panel2); border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
+  .mbc-fill { height: 100%; border-radius: 2px; }
+  .mbc-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--text); width: 38px; text-align: right; flex-shrink: 0; }
+
+  /* instance dist */
+  .inst-bars { display: flex; align-items: flex-end; gap: 5px; height: 60px; margin-top: 8px; }
+  .ib-col { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+  .ib-bar { width: 100%; border-radius: 3px 3px 0 0; }
+  .ib-lbl { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  .train-color { background: linear-gradient(to top, var(--accent2), rgba(62,201,138,.4)); }
+  .valid-color { background: linear-gradient(to top, var(--accent3), rgba(91,140,255,.4)); }
+  .test-color  { background: linear-gradient(to top, var(--accent),  rgba(245,166,35,.4)); }
+</style>
+</head>
+<body>
+<div class="poster-inner">
+
+  <!-- ══════════════════════ HEADER ══════════════════════ -->
+  <div class="header">
+    <div class="header-left">
+      <div class="eyebrow">Instance Segmentation · Computer Vision · Depth Analysis</div>
+      <h1>
+        <span class="hl">PothRGBD</span> YOLO Segmentation<br>
+        <span class="hl2">RGB-D Pothole Detection &amp; Instance Segmentation</span>
+      </h1>
+      <p class="subtitle">
+        Pipeline segmentasi instance lubang jalan berbasis <strong>YOLOv8-seg</strong> pada dataset PothRGBD,
+        dilengkapi analisis depth map untuk pemahaman karakteristik geometri area pothole.
+      </p>
+      <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:-4px;">
+        <a href="https://github.com/Yuuuuurei/pothrgbd-yolo-segmentation"
+           style="font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); text-decoration:none;">
+          github.com/Yuuuuurei/pothrgbd-yolo-segmentation
+        </a>
+        <span style="color:var(--border); font-size:10px;">|</span>
+        <a href="https://www.kaggle.com/datasets/mahyeks/pothrgbd-rgb-and-depth-images-of-potholes"
+           style="font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--accent3); text-decoration:none;">
+          kaggle.com/datasets/mahyeks/pothrgbd-rgb-and-depth-images-of-potholes
+        </a>
+        <span style="color:var(--border); font-size:10px;">|</span>
+        <a href="https://ultralytics.com"
+           style="font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--accent2); text-decoration:none;">
+          ultralytics.com — YOLOv8-seg
+        </a>
+      </div>
+      <div class="author-links">
+        <span class="badge badge-amber">YOLOv8-seg</span>
+        <span class="badge badge-green">Mask mAP50 = 0.9720</span>
+        <span class="badge badge-blue">RGB-D Analysis</span>
+      </div>
+    </div>
+    <div class="author-block">
+      <div class="author-name">Fahri Desrian</div>
+      <div class="author-nim">NPM: 2206048726</div>
+      <div class="author-inst">Program Studi Matematika<br>Universitas Indonesia</div>
+      <div style="margin-top:8px">
+        <div class="author-nim" style="color:var(--muted);font-size:10px">fahri.desrian@ui.ac.id</div>
+        <a href="https://github.com/Yuuuuurei" style="color:var(--accent3);font-size:10px;margin-top:2px;font-family:'JetBrains Mono',monospace;text-decoration:none;display:block">github.com/Yuuuuurei</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ MAIN GRID ══════════════════════ -->
+  <div class="main-grid">
+
+    <!-- ─── ROW 1: Pipeline + Dataset ─── -->
+
+    <!-- PIPELINE (span 2) -->
+    <div class="panel panel-accent-top span2">
+      <div class="sec-label">
+        <span class="sec-num">01</span>
+        <span class="sec-title">Pipeline Utama</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <span class="ps-label">Input</span>
+          <span class="ps-desc">Citra RGB<br>+ Depth Map</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <span class="ps-label">Prep</span>
+          <span class="ps-desc">Dataset Setup<br>&amp; Integrity Check</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <span class="ps-label">EDA</span>
+          <span class="ps-desc">Exploratory<br>Data Analysis</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" style="border-color:var(--accent2);border-width:2px">
+          <span class="ps-label" style="color:var(--accent2)">Training</span>
+          <span class="ps-desc">YOLOv8-seg<br>Fine-tuning</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <span class="ps-label">Eval</span>
+          <span class="ps-desc">Box &amp; Mask<br>Metrics</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <span class="ps-label">Inference</span>
+          <span class="ps-desc">Prediksi<br>pada Test Set</span>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" style="border-color:var(--accent3);border-width:2px">
+          <span class="ps-label" style="color:var(--accent3)">Depth</span>
+          <span class="ps-desc">Analisis &amp;<br>Visualisasi 3D</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LATAR BELAKANG -->
+    <div class="panel panel-accent-blue">
+      <div class="sec-label">
+        <span class="sec-num">02</span>
+        <span class="sec-title">Latar Belakang</span>
+        <div class="sec-line"></div>
+      </div>
+      <p>
+        Lubang jalan (<strong>pothole</strong>) merupakan kerusakan infrastruktur yang mengancam keselamatan berkendara.
+        Deteksi manual bersifat lambat dan tidak konsisten.
+      </p>
+      <p style="margin-top:10px">
+        Pendekatan berbasis deep learning, khususnya <strong>instance segmentation</strong>, memungkinkan
+        identifikasi lokasi dan bentuk pothole secara otomatis dengan presisi piksel. Penggabungan data RGB
+        dan <strong>depth map</strong> menambah dimensi geometri kedalaman relatif, penting bagi manajemen jalan.
+      </p>
+    </div>
+
+    <!-- ─── ROW 2: Dataset + Arch + Methodology ─── -->
+
+    <!-- DATASET -->
+    <div class="panel">
+      <div class="sec-label">
+        <span class="sec-num">03</span>
+        <span class="sec-title">Dataset</span>
+        <div class="sec-line"></div>
+      </div>
+      <p style="margin-bottom:10px">
+        <strong>PothRGBD:</strong> RGB and Depth Images of Potholes (Kaggle)
+      </p>
+
+      <div class="stat-row">
+        <div class="stat-box">
+          <span class="stat-val">996</span>
+          <div class="stat-label">Total Pasangan<br>RGB-Depth</div>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val">1</span>
+          <div class="stat-label">Kelas Objek<br><span class="tag-inline">pothole</span></div>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val">1.10</span>
+          <div class="stat-label">Rata-rata Inst<br>per Gambar</div>
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Split</th>
+            <th>N Images</th>
+            <th>N Depth</th>
+            <th>Total Inst</th>
+            <th>Max Inst</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>train</td>
+            <td class="num-cell">697</td>
+            <td class="num-cell">697</td>
+            <td class="num-cell">766</td>
+            <td class="num-cell">13</td>
+          </tr>
+          <tr>
+            <td>valid</td>
+            <td class="num-cell">199</td>
+            <td class="num-cell">199</td>
+            <td class="num-cell">220</td>
+            <td class="num-cell">7</td>
+          </tr>
+          <tr>
+            <td>test</td>
+            <td class="num-cell">100</td>
+            <td class="num-cell">100</td>
+            <td class="num-cell">111</td>
+            <td class="num-cell">4</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="char-pills">
+        <div class="char-pill"><span class="dot"></span>Anotasi YOLO polygon</div>
+        <div class="char-pill"><span class="dot" style="background:var(--accent3)"></span>Depth <span class="tag-inline">.npy uint16</span></div>
+        <div class="char-pill"><span class="dot" style="background:var(--accent)"></span>Nilai depth relatif</div>
+      </div>
+    </div>
+
+    <!-- ARSITEKTUR MODEL -->
+    <div class="panel panel-accent-green">
+      <div class="sec-label">
+        <span class="sec-num">04</span>
+        <span class="sec-title">Arsitektur Model</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="arch-diagram">
+
+        <div class="arch-layer">
+          <div class="arch-label-col"><span class="arch-label">Input</span></div>
+          <div class="arch-blocks">
+            <div class="arch-block ab-gray" style="flex:3">RGB Image (640 × 640 × 3)</div>
+          </div>
+        </div>
+
+        <div class="arch-arrow-row">
+          <span class="arch-arr">↓</span>
+          <span style="font-size:10px;color:var(--muted)">Backbone</span>
+        </div>
+
+        <div class="arch-layer">
+          <div class="arch-label-col"><span class="arch-label">CSPDarknet</span></div>
+          <div class="arch-blocks">
+            <div class="arch-block ab-dark">C2f Block P3</div>
+            <div class="arch-block ab-dark">C2f Block P4</div>
+            <div class="arch-block ab-dark">C2f Block P5</div>
+          </div>
+        </div>
+
+        <div class="arch-arrow-row">
+          <span class="arch-arr">↓</span>
+          <span style="font-size:10px;color:var(--muted)">Neck</span>
+        </div>
+
+        <div class="arch-layer">
+          <div class="arch-label-col"><span class="arch-label">PANet FPN</span></div>
+          <div class="arch-blocks">
+            <div class="arch-block ab-mid">Upsample + Concat</div>
+            <div class="arch-block ab-mid">Downsample + Concat</div>
+          </div>
+        </div>
+
+        <div class="arch-arrow-row">
+          <span class="arch-arr">↓</span>
+          <span style="font-size:10px;color:var(--muted)">Head (Detection + Seg)</span>
+        </div>
+
+        <div class="arch-layer">
+          <div class="arch-label-col"><span class="arch-label">Decoupled<br>Head</span></div>
+          <div class="arch-blocks">
+            <div class="arch-block ab-green">Detect Head<br><small style="opacity:.7">(cls · box)</small></div>
+            <div class="arch-block ab-green">Seg Head<br><small style="opacity:.7">(32 protos)</small></div>
+          </div>
+        </div>
+
+        <div class="arch-arrow-row">
+          <span class="arch-arr">↓</span>
+          <span style="font-size:10px;color:var(--muted)">Output</span>
+        </div>
+
+        <div class="arch-layer">
+          <div class="arch-label-col"><span class="arch-label">Output</span></div>
+          <div class="arch-blocks">
+            <div class="arch-block ab-gray">BBox + Score + Instance Mask</div>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin-top:10px;font-size:11px;color:var(--muted)">
+        Model default: <span class="tag-inline">yolov8n-seg.pt</span>.
+        Depth map <strong>tidak</strong> digunakan sebagai input YOLO, tetapi digunakan untuk analisis lanjutan pascasegmentasi.
+      </p>
+    </div>
+
+    <!-- METODOLOGI -->
+    <div class="panel">
+      <div class="sec-label">
+        <span class="sec-num">05</span>
+        <span class="sec-title">Metodologi</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="method-steps">
+        <div class="method-step">
+          <div class="ms-num">1</div>
+          <div class="ms-content">
+            <div class="ms-title">Persiapan Dataset</div>
+            <div class="ms-desc">Unduh otomatis via Kaggle API, pasangkan RGB–label–depth, bagi menjadi <em>train/valid/test</em>, buat <code style="font-size:10px">data.yaml</code>.</div>
+          </div>
+        </div>
+        <div class="method-step">
+          <div class="ms-num">2</div>
+          <div class="ms-content">
+            <div class="ms-title">Pemeriksaan Integritas</div>
+            <div class="ms-desc">Validasi kelengkapan pasangan RGB, label, dan depth <code class="mono">.npy</code>, serta format label YOLO polygon.</div>
+          </div>
+        </div>
+        <div class="method-step">
+          <div class="ms-num">3</div>
+          <div class="ms-content">
+            <div class="ms-title">EDA</div>
+            <div class="ms-desc">Analisis distribusi instance per gambar, distribusi area bounding box relatif, dan statistik per split.</div>
+          </div>
+        </div>
+        <div class="method-step">
+          <div class="ms-num">4</div>
+          <div class="ms-content">
+            <div class="ms-title">Training YOLOv8-seg</div>
+            <div class="ms-desc">Fine-tuning YOLOv8n-seg dengan citra RGB, optimasi loss deteksi + segmentasi + distribusi prototipe mask.</div>
+          </div>
+        </div>
+        <div class="method-step">
+          <div class="ms-num">5</div>
+          <div class="ms-content">
+            <div class="ms-title">Evaluasi &amp; Inference</div>
+            <div class="ms-desc">Hitung Precision, Recall, mAP50, mAP50-95 pada split test. Jalankan inference dengan threshold conf 0.40.</div>
+          </div>
+        </div>
+        <div class="method-step">
+          <div class="ms-num" style="background:linear-gradient(135deg,var(--accent3),#3a6fff)">6</div>
+          <div class="ms-content">
+            <div class="ms-title">Analisis Depth</div>
+            <div class="ms-desc">Statistik depth (mean, median, std, Q25/Q75) dalam area mask. Visualisasi profil horizontal &amp; vertikal, surface plot 3D, point cloud <code class="mono">.ply</code>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ROW 3: EDA + Evaluation ─── -->
+
+    <!-- EDA VISUALISATION -->
+    <div class="panel">
+      <div class="sec-label">
+        <span class="sec-num">06</span>
+        <span class="sec-title">EDA: Distribusi Instance</span>
+        <div class="sec-line"></div>
+      </div>
+      <p style="margin-bottom:10px">Mayoritas gambar memiliki <strong>1 instance</strong> pothole. Distribusi right-skewed, menunjukkan bahwa kasus multi-instance relatif jarang.</p>
+
+      <!-- Instance bar chart per split -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+        <!-- Train -->
+        <div style="background:var(--panel2);border-radius:6px;padding:10px;border:1px solid var(--border)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Train (n=697)</div>
+          <div class="inst-bars">
+            <div class="ib-col"><div class="ib-bar train-color" style="height:56px"></div><div class="ib-lbl">1</div></div>
+            <div class="ib-col"><div class="ib-bar train-color" style="height:14px"></div><div class="ib-lbl">2</div></div>
+            <div class="ib-col"><div class="ib-bar train-color" style="height:4px"></div><div class="ib-lbl">3</div></div>
+            <div class="ib-col"><div class="ib-bar train-color" style="height:2px"></div><div class="ib-lbl">4+</div></div>
+          </div>
+        </div>
+        <!-- Valid -->
+        <div style="background:var(--panel2);border-radius:6px;padding:10px;border:1px solid var(--border)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Valid (n=199)</div>
+          <div class="inst-bars">
+            <div class="ib-col"><div class="ib-bar valid-color" style="height:50px"></div><div class="ib-lbl">1</div></div>
+            <div class="ib-col"><div class="ib-bar valid-color" style="height:12px"></div><div class="ib-lbl">2</div></div>
+            <div class="ib-col"><div class="ib-bar valid-color" style="height:3px"></div><div class="ib-lbl">3</div></div>
+            <div class="ib-col"><div class="ib-bar valid-color" style="height:1px"></div><div class="ib-lbl">4+</div></div>
+          </div>
+        </div>
+        <!-- Test -->
+        <div style="background:var(--panel2);border-radius:6px;padding:10px;border:1px solid var(--border)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Test (n=100)</div>
+          <div class="inst-bars">
+            <div class="ib-col"><div class="ib-bar test-color" style="height:54px"></div><div class="ib-lbl">1</div></div>
+            <div class="ib-col"><div class="ib-bar test-color" style="height:8px"></div><div class="ib-lbl">2</div></div>
+            <div class="ib-col"><div class="ib-bar test-color" style="height:3px"></div><div class="ib-lbl">3</div></div>
+            <div class="ib-col"><div class="ib-bar test-color" style="height:1px"></div><div class="ib-lbl">4+</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BBox area distribution -->
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Distribusi Area BBox Relatif (mean ≈ 0.32)</div>
+      <div class="mini-bar-chart">
+        <div class="mbc-row">
+          <span class="mbc-label">0.0–0.1</span>
+          <div class="mbc-track"><div class="mbc-fill train-color" style="width:22%"></div></div>
+          <span class="mbc-val">~22%</span>
+        </div>
+        <div class="mbc-row">
+          <span class="mbc-label">0.1–0.3</span>
+          <div class="mbc-track"><div class="mbc-fill train-color" style="width:45%"></div></div>
+          <span class="mbc-val">~45%</span>
+        </div>
+        <div class="mbc-row">
+          <span class="mbc-label">0.3–0.5</span>
+          <div class="mbc-track"><div class="mbc-fill train-color" style="width:20%"></div></div>
+          <span class="mbc-val">~20%</span>
+        </div>
+        <div class="mbc-row">
+          <span class="mbc-label">0.5–1.0</span>
+          <div class="mbc-track"><div class="mbc-fill train-color" style="width:13%"></div></div>
+          <span class="mbc-val">~13%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVALUATION RESULTS -->
+    <div class="panel panel-accent-green">
+      <div class="sec-label">
+        <span class="sec-num">07</span>
+        <span class="sec-title">Hasil Evaluasi</span>
+        <div class="sec-line"></div>
+      </div>
+
+      <div class="metrics-grid">
+        <!-- Box -->
+        <div class="metric-card">
+          <div class="metric-type">Box Metrics</div>
+          <div class="metric-row">
+            <span class="metric-key">Precision</span>
+            <span class="metric-val val-normal">0.9243</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:92.43%"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">Recall</span>
+            <span class="metric-val val-normal">0.8797</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:87.97%"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">mAP50</span>
+            <span class="metric-val val-highlight">0.9456</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:94.56%"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">mAP50-95</span>
+            <span class="metric-val val-normal">0.6030</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:60.3%"></div></div>
+        </div>
+
+        <!-- Mask -->
+        <div class="metric-card" style="border:1px solid rgba(62,201,138,.3)">
+          <div class="metric-type" style="color:var(--accent2)">Mask Metrics</div>
+          <div class="metric-row">
+            <span class="metric-key">Precision</span>
+            <span class="metric-val val-highlight">0.9526</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:95.26%"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">Recall</span>
+            <span class="metric-val val-normal">0.9060</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:90.6%"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">mAP50</span>
+            <span class="metric-val" style="color:#3EC98A;font-size:17px">0.9720</span>
+          </div>
+          <div class="progress-bar" style="height:7px"><div class="progress-fill" style="width:97.2%;background:linear-gradient(90deg,var(--accent2),#aaff80)"></div></div>
+          <div class="metric-row" style="margin-top:8px">
+            <span class="metric-key">mAP50-95</span>
+            <span class="metric-val val-normal">0.6396</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:63.96%"></div></div>
+        </div>
+      </div>
+
+      <div style="background:rgba(62,201,138,.07);border:1px solid rgba(62,201,138,.25);border-radius:8px;padding:12px 14px;margin-top:12px">
+        <div style="font-size:12px;color:var(--label);line-height:1.5">
+          <strong style="color:var(--accent2)">Mask mAP50 = 0.9720</strong> menunjukkan performa segmentasi sangat tinggi pada threshold IoU 0.50.
+          Precision &gt; Recall menunjukkan model konservatif namun akurat. mAP50-95 lebih rendah karena
+          threshold IoU lebih ketat (0.50–0.95).
+        </div>
+      </div>
+    </div>
+
+    <!-- DEPTH ANALYSIS -->
+    <div class="panel panel-accent-blue">
+      <div class="sec-label">
+        <span class="sec-num">08</span>
+        <span class="sec-title">Analisis Depth</span>
+        <div class="sec-line"></div>
+      </div>
+
+      <p style="margin-bottom:10px">
+        Statistik depth dihitung pada area mask pothole. Nilai bersifat <strong>relatif</strong> (uint16) karena metadata kalibrasi kamera tidak tersedia.
+      </p>
+
+      <!-- Example depth stats -->
+      <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Contoh Hasil Analisis Statistik (Sampel 20250227)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="font-size:12px;color:var(--label)">Jumlah piksel: <span style="color:var(--text);font-weight:600">307,200</span></div>
+          <div style="font-size:12px;color:var(--label)">Mean depth: <span style="color:var(--text);font-weight:600">676.65</span></div>
+          <div style="font-size:12px;color:var(--label)">Median depth: <span style="color:var(--text);font-weight:600">721.00</span></div>
+          <div style="font-size:12px;color:var(--label)">Std depth: <span style="color:var(--text);font-weight:600">208.24</span></div>
+          <div style="font-size:12px;color:var(--label)">Depth range: <span style="color:var(--text);font-weight:600">923.00</span></div>
+          <div style="font-size:12px;color:var(--label)">Q25 / Q75: <span style="color:var(--text);font-weight:600">658 / 786</span></div>
+        </div>
+      </div>
+
+      <!-- Output types -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--panel2);border-radius:6px;border:1px solid var(--border);padding:10px 12px">
+          <div style="font-size:11px;font-weight:600;color:var(--accent3);margin-bottom:4px">Profil Depth</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4">Horizontal (centroid row) &amp; vertikal (centroid column) untuk melihat variasi kedalaman.</div>
+        </div>
+        <div style="background:var(--panel2);border-radius:6px;border:1px solid var(--border);padding:10px 12px">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:4px">Surface Plot</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4">Visualisasi 3D topografi area pothole dalam koordinat piksel × nilai depth.</div>
+        </div>
+        <div style="background:var(--panel2);border-radius:6px;border:1px solid var(--border);padding:10px 12px">
+          <div style="font-size:11px;font-weight:600;color:var(--accent2);margin-bottom:4px">Depth Map</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4">Heatmap full-frame ternormalisasi + cropped area mask dengan colormap <em>plasma</em>.</div>
+        </div>
+        <div style="background:var(--panel2);border-radius:6px;border:1px solid var(--border);padding:10px 12px">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Point Cloud</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4">Ekspor opsional <span class="tag-inline">.ply</span> via Open3D, kompatibel MeshLab / Blender.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ROW 4: Visualisation Results ─── -->
+
+    <!-- VISUAL RESULTS (span 3) -->
+    <div class="panel span3">
+      <div class="sec-label">
+        <span class="sec-num">09</span>
+        <span class="sec-title">Visualisasi Hasil Segmentasi &amp; Depth</span>
+        <div class="sec-line"></div>
+      </div>
+
+      <div class="seg-vis">
+        <!-- Card 1: Original -->
+        <div class="seg-card">
+          <div class="seg-canvas">
+            <img src="outputs/poster_cards/card_01_rgb.png" alt="Citra RGB asli pothole">
+          </div>
+          <div class="seg-caption">Citra RGB Asli (Pothole)</div>
+        </div>
+
+        <!-- Card 2: Prediction with mask -->
+        <div class="seg-card">
+          <div class="seg-canvas">
+            <img src="outputs/poster_cards/card_02_prediction.png" alt="Prediksi bounding box dan instance mask">
+          </div>
+          <div class="seg-caption">Prediksi: BBox + Instance Mask</div>
+        </div>
+
+        <!-- Card 3: Depth map -->
+        <div class="seg-card">
+          <div class="seg-canvas">
+            <img src="outputs/poster_cards/card_03_depth_map.png" alt="Depth map full frame ternormalisasi">
+          </div>
+          <div class="seg-caption">Depth Map Full-Frame (Ternormalisasi)</div>
+        </div>
+
+        <!-- Card 4: Surface plot illustration -->
+        <div class="seg-card">
+          <div class="seg-canvas contain">
+            <img src="outputs/poster_cards/card_05_surface_plot.png" alt="Surface plot 3D topografi pothole">
+          </div>
+          <div class="seg-caption">Surface Plot 3D Topografi Pothole</div>
+        </div>
+    </div>
+
+    <!-- ─── ROW 5: Conclusion (span 3) ─── -->
+
+    <!-- CONCLUSION -->
+    <div class="panel span3" style="border:1px solid rgba(245,166,35,.25)">
+      <div class="sec-label">
+        <span class="sec-num">10</span>
+        <span class="sec-title">Kesimpulan</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="conclusion-grid">
+        <div class="conc-item">
+          <div class="conc-title">Performa Segmentasi Tinggi</div>
+          <div class="conc-text">
+            YOLOv8-seg mencapai <strong>Mask mAP50 = 0.9720</strong> dan <strong>Mask Precision = 0.9526</strong> pada test set PothRGBD,
+            membuktikan efektivitas pendekatan instance segmentation untuk deteksi pothole.
+          </div>
+        </div>
+        <div class="conc-item">
+          <div class="conc-title">Depth sebagai Analisis Lanjutan</div>
+          <div class="conc-text">
+            Depth map (.npy uint16) dimanfaatkan secara efektif sebagai sumber analisis pascasegmentasi:
+            profil geometri, surface plot 3D, dan distribusi statistik area pothole,
+            tanpa dimasukkan langsung ke model YOLO.
+          </div>
+        </div>
+        <div class="conc-item">
+          <div class="conc-title">Pipeline Modular &amp; Reproducible</div>
+          <div class="conc-text">
+            Setiap tahap (setup, EDA, training, evaluasi, analisis depth) dimodularisasi dalam script
+            terpisah. Dataset diunduh otomatis via Kaggle API. Seluruh proses dapat direproduksi
+            dari repository GitHub.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-grid -->
+
+
+
+</div><!-- /poster-inner -->
+</body>
+</html>
